@@ -7,15 +7,27 @@ APP_NAME = "Clippy"
 
 DEFAULT_CONFIG = {
     "hotkey": "ctrl+space",
-    "tts_provider": "elevenlabs",  # or pyttsx3
+    # --- LLM ---
+    "llm_provider": "gemini",           # gemini | anthropic | ollama | openai
+    "llm_model": "gemini-2.5-flash",    # model name (provider-specific)
+    "ollama_host": "http://localhost:11434",
+    "openai_base_url": "https://api.openai.com/v1",
+    # --- Voice ---
+    "tts_provider": "pyttsx3",          # elevenlabs | pyttsx3
     "voice_id": "rachel",
-    "llm_provider": "anthropic", # 'anthropic', 'gemini', or 'local'
     "whisper_model": "tiny.en",
-    "multi_monitor": False,
+    # --- Capture ---
+    "capture_max_width": 1280,
+    "capture_jpeg_quality": 80,
+    # --- UI ---
+    "cursor_color": "66,133,244",
     "theme": "auto",
+    # --- Misc ---
+    "multi_monitor": False,
     "custom_system_prompt_append": "",
-    "history_enabled": False
+    "history_enabled": False,
 }
+
 
 class ConfigManager:
     def __init__(self):
@@ -35,7 +47,7 @@ class ConfigManager:
         try:
             with open(self.config_path, "r", encoding="utf-8") as f:
                 data = json.load(f)
-                # merge with defaults for missing keys
+                # Merge with defaults for any missing keys
                 for k, v in DEFAULT_CONFIG.items():
                     if k not in data:
                         data[k] = v
@@ -55,7 +67,10 @@ class ConfigManager:
         self.save_config()
 
     def get_api_key(self, service_name):
-        return keyring.get_password(APP_NAME, f"{service_name}_api_key")
+        try:
+            return keyring.get_password(APP_NAME, f"{service_name}_api_key")
+        except Exception:
+            return None
 
     def set_api_key(self, service_name, api_key):
         if api_key:
@@ -63,7 +78,8 @@ class ConfigManager:
         else:
             try:
                 keyring.delete_password(APP_NAME, f"{service_name}_api_key")
-            except keyring.errors.PasswordDeleteError:
+            except Exception:
                 pass
+
 
 config = ConfigManager()

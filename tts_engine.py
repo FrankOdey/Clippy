@@ -17,9 +17,7 @@ class TTSEngine:
         if self.provider == "elevenlabs" and api_key and ElevenLabs is not None:
             self.eleven_client = ElevenLabs(api_key=api_key)
             
-        self.offline_engine = pyttsx3.init()
-        # Ensure offline voice rate is reasonable
-        self.offline_engine.setProperty('rate', 170)
+        self.offline_engine = None
         
         self.text_queue = queue.Queue()
         self.worker = threading.Thread(target=self._process_queue, daemon=True)
@@ -39,12 +37,15 @@ class TTSEngine:
             except queue.Empty:
                 break
         
-        # We can't immediately stop blocking ElevenLabs stream easily without killing process here,
-        # but offline engine can be stopped
-        if not self.eleven_client:
+        # We can't immediately stop blocking ElevenLabs stream easily without killing process here
+        if self.offline_engine:
              self.offline_engine.stop()
 
     def _process_queue(self):
+        # COM object must be initialized on the thread that runs it
+        self.offline_engine = pyttsx3.init()
+        self.offline_engine.setProperty('rate', 170)
+
         while True:
             text = self.text_queue.get()
             if text is None:

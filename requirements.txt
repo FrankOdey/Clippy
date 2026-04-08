@@ -1,20 +1,29 @@
+# Core GUI + system
 PyQt6
 keyboard
-dxcam
-mss
-sounddevice
-webrtcvad
-openai-whisper
-anthropic
-elevenlabs
-pyttsx3
 pillow
 psutil
 pywin32
 keyring
-google-genai
+
+# Screen capture
+dxcam
+mss
 opencv-python
 numpy
+
+# LLM providers (install what you need)
+google-genai
+anthropic
+httpx
+
+# Voice
+sounddevice
+webrtcvad
+openai-whisper
+pyttsx3
+elevenlabs
+
+# Dev / test
 pytest
 pytest-qt
-pytest-httpx
