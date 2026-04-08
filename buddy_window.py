@@ -68,6 +68,17 @@ class BuddyWindow(QWidget):
         return QSize(30, 30)
 
     # ------------------------------------------------------------------
+    # Live preview injection
+    # ------------------------------------------------------------------
+    def set_color(self, rgb_str):
+        try:
+            r, g, b = map(int, rgb_str.split(","))
+            self.cursor_color = QColor(r, g, b)
+            self.update()
+        except:
+            pass
+
+    # ------------------------------------------------------------------
     # Cursor-follow lerp
     # ------------------------------------------------------------------
     def _update_position(self):

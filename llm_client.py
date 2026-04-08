@@ -3,6 +3,7 @@ import sys
 import re
 import time
 import threading
+import httpx
 from datetime import datetime
 
 import psutil
@@ -77,15 +78,59 @@ class LLMClient:
             if self.api_key:
                 print(f"Using environment variable for {self.provider} API key")
 
-        # Initialise provider clients
         self.anthropic_client = None
         self.gemini_client = None
+        self.error_state = None
 
+        # Auto-detect fallback logic
+        provider_ready = False
         if self.provider == "anthropic" and self.api_key and Anthropic is not None:
             self.anthropic_client = Anthropic(api_key=self.api_key)
+            provider_ready = True
         elif self.provider == "gemini" and self.api_key and genai is not None:
             self.gemini_client = genai.Client(api_key=self.api_key)
-        # ollama / openai handled inline (no persistent client needed)
+            provider_ready = True
+        elif self.provider == "openai" and self.api_key:
+            provider_ready = True
+        elif self.provider == "ollama":
+            pass # verified actively below
+
+        # If provider isn't ready (missing key/packages) OR provider is explicitly ollama:
+        if not provider_ready or self.provider == "ollama":
+            # Attempt Ollama local detection
+            host = config.get("ollama_host", "http://localhost:11434")
+            try:
+                r = httpx.get(f"{host}/api/tags", timeout=1.0)
+                if r.status_code == 200:
+                    tags = r.json().get("models", [])
+                    models = [m.get("name") for m in tags]
+                    
+                    self.provider = "ollama"
+                    
+                    # Auto-select a vision model if available
+                    preferred = ["moondream:latest", "llava:latest"]
+                    found_model = None
+                    for p in preferred:
+                        if p in models:
+                            found_model = p
+                            break
+                            
+                    if found_model:
+                        self.model_name = found_model
+                    elif models:
+                        self.model_name = models[0] # Fallback to first available
+                    else:
+                        self.error_state = "Ollama is running but has no models pulled."
+                        
+                    provider_ready = True
+                    print(f"✅ Active Provider: Ollama -> {self.model_name}")
+            except Exception as e:
+                if self.provider == "ollama":
+                    self.error_state = f"Ollama connection failed: {e}"
+                
+        if not provider_ready and not self.error_state:
+            self.error_state = f"Provider '{self.provider}' failed to initialize (missing API key or package)."
+
 
     # ------------------------------------------------------------------
     # System prompt
@@ -120,7 +165,10 @@ class LLMClient:
         if cancel_event is None:
             cancel_event = threading.Event()
 
-        # Validate provider readiness
+        if self.error_state:
+            error_callback(self.error_state); return
+            
+        # Validate provider readiness (safety check)
         if self.provider == "anthropic":
             if Anthropic is None:
                 error_callback("anthropic package is not installed."); return

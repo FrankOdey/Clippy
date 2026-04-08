@@ -5,6 +5,7 @@ from PyQt6.QtGui import QIcon, QPixmap, QPainter, QColor, QAction
 from PyQt6.QtCore import QThread, pyqtSignal, QTimer
 
 from buddy_window import BuddyWindow
+from settings_dialog import SettingsDialog
 from hotkey_listener import HotkeyListener
 from screen_capture import ScreenCapturer
 from llm_client import LLMClient
@@ -87,6 +88,14 @@ class ClippyApp:
 
         # System tray
         self._setup_tray()
+        
+        # Check LLM error state on startup
+        if self.llm_client.error_state:
+            self.tray.showMessage("Clippy Error", self.llm_client.error_state, QSystemTrayIcon.MessageIcon.Error, 5000)
+        elif self.llm_client.provider == "ollama":
+            self.tray.showMessage("Clippy Offline Mode", f"Found Ollama! Using local {self.llm_client.model_name}", QSystemTrayIcon.MessageIcon.Information, 5000)
+        else:
+            self.tray.showMessage("Clippy Online", f"Connected securely to {self.llm_client.provider}", QSystemTrayIcon.MessageIcon.Information, 3000)
 
     # ------------------------------------------------------------------
     # System tray
@@ -95,14 +104,18 @@ class ClippyApp:
         self.tray = QSystemTrayIcon(QIcon(_create_tray_icon_pixmap()), self.app)
         menu = QMenu()
 
-        provider_label = menu.addAction(f"Provider: {self.llm_client.provider}")
-        provider_label.setEnabled(False)
+        self.provider_label = menu.addAction(f"Provider: {self.llm_client.provider}")
+        self.provider_label.setEnabled(False)
 
-        model_label = menu.addAction(f"Model: {self.llm_client.model_name}")
-        model_label.setEnabled(False)
+        self.model_label = menu.addAction(f"Model: {self.llm_client.model_name}")
+        self.model_label.setEnabled(False)
 
         menu.addSeparator()
 
+        settings_action = QAction("Settings...", menu)
+        settings_action.triggered.connect(self._open_settings)
+        menu.addAction(settings_action)
+        
         clear_action = QAction("Clear History", menu)
         clear_action.triggered.connect(lambda: self.memory.clear())
         menu.addAction(clear_action)
@@ -116,6 +129,31 @@ class ClippyApp:
         self.tray.setContextMenu(menu)
         self.tray.setToolTip(f"Clippy — {self.llm_client.provider}/{self.llm_client.model_name}")
         self.tray.show()
+
+    def _open_settings(self):
+        dialog = SettingsDialog(self.window)
+        dialog.color_preview.connect(self.window.set_color)
+        dialog.settings_saved.connect(self._apply_settings)
+        dialog.exec()
+
+    def _apply_settings(self):
+        # Full subsystem reset
+        self.llm_client = LLMClient()
+        self.provider_label.setText(f"Provider: {self.llm_client.provider}")
+        self.model_label.setText(f"Model: {self.llm_client.model_name}")
+        self.tray.setToolTip(f"Clippy — {self.llm_client.provider}/{self.llm_client.model_name}")
+        
+        # Hotkey listener reset
+        self.hotkey_listener.stop()
+        self.hotkey_listener.wait()
+        
+        self.hotkey_listener = HotkeyListener()
+        self.hotkey_listener.hotkey_pressed.connect(self.on_trigger)
+        self.hotkey_listener.cancel_pressed.connect(self.on_cancel)
+        self.hotkey_listener.start()
+        
+        if self.llm_client.error_state:
+            self.tray.showMessage("Clippy Error", self.llm_client.error_state, QSystemTrayIcon.MessageIcon.Error, 5000)
 
     def _quit(self):
         self.hotkey_listener.stop()
